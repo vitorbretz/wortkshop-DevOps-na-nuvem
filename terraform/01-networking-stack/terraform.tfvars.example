@@ -1,0 +1,28 @@
+# Example Variable Values
+# Copy this file to terraform.tfvars and customize as needed
+
+# General Configuration
+aws_region   = "us-east-1"
+project_name = "dvn-workshop"
+environment  = "dev"
+
+# VPC Configuration
+vpc_cidr             = "10.0.0.0/24"
+enable_dns_hostnames = true
+enable_dns_support   = true
+
+# Availability Zones
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+# Subnet Configuration
+public_subnet_cidrs  = ["10.0.0.0/26", "10.0.0.64/26"]
+private_subnet_cidrs = ["10.0.0.128/26", "10.0.0.192/26"]
+
+# NAT Gateway
+create_nat_gateway = true
+
+# Additional Tags
+additional_tags = {
+  CostCenter = "engineering"
+  Owner      = "devops-team"
+}
