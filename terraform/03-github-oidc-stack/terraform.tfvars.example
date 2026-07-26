@@ -1,0 +1,13 @@
+aws_region  = "us-east-1"
+environment = "production"
+project_name = "dvn-workshop"
+
+# GitHub Configuration
+github_org  = "your-github-username-or-org"
+github_repo = "your-repo-name"
+
+# ECR Repository ARNs
+ecr_repository_arns = [
+  "arn:aws:ecr:us-east-1:910661159891:repository/dvn-workshop/frontend",
+  "arn:aws:ecr:us-east-1:910661159891:repository/dvn-workshop/backend"
+]

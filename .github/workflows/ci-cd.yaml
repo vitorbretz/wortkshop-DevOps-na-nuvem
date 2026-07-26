@@ -1,0 +1,134 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 910661159891.dkr.ecr.us-east-1.amazonaws.com
+  ECR_REPO_FRONTEND: dvn-workshop/frontend
+  ECR_REPO_BACKEND: dvn-workshop/backend
+
+jobs:
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+      kubernetes: ${{ steps.filter.outputs.kubernetes }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'dvn-workshop-apps/frontend/**'
+            backend:
+              - 'dvn-workshop-apps/backend/**'
+            kubernetes:
+              - 'dvn-workshop-kubernetes/**'
+
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPO_FRONTEND:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPO_FRONTEND:latest \
+            dvn-workshop-apps/frontend/youtube-live-app/
+          docker push $ECR_REGISTRY/$ECR_REPO_FRONTEND:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPO_FRONTEND:latest
+
+      - name: Update Kustomization
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          cd dvn-workshop-kubernetes/frontend
+          kustomize edit set image $ECR_REGISTRY/$ECR_REPO_FRONTEND=$ECR_REGISTRY/$ECR_REPO_FRONTEND:$IMAGE_TAG
+
+      - name: Commit and push changes
+        if: github.event_name == 'push'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add dvn-workshop-kubernetes/frontend/kustomization.yaml
+          git diff --staged --quiet || git commit -m "chore: update frontend image to ${{ github.sha }}"
+          git push
+
+  build-backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPO_BACKEND:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPO_BACKEND:latest \
+            dvn-workshop-apps/backend/YoutubeLiveApp/
+          docker push $ECR_REGISTRY/$ECR_REPO_BACKEND:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPO_BACKEND:latest
+
+      - name: Update Kustomization
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          cd dvn-workshop-kubernetes/backend
+          kustomize edit set image $ECR_REGISTRY/$ECR_REPO_BACKEND=$ECR_REGISTRY/$ECR_REPO_BACKEND:$IMAGE_TAG
+
+      - name: Commit and push changes
+        if: github.event_name == 'push'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add dvn-workshop-kubernetes/backend/kustomization.yaml
+          git diff --staged --quiet || git commit -m "chore: update backend image to ${{ github.sha }}"
+          git push

@@ -1,0 +1,23 @@
+#!/bin/bash
+set -e
+
+echo "📋 GitHub Secrets Setup Guide"
+echo "=============================="
+echo ""
+echo "After applying the Terraform in terraform/03-github-oidc-stack/, you need to configure"
+echo "the following secret in your GitHub repository:"
+echo ""
+echo "Secret Name: AWS_ROLE_ARN"
+echo "Secret Value: <output from terraform output github_actions_role_arn>"
+echo ""
+echo "To add the secret:"
+echo "1. Go to your GitHub repository"
+echo "2. Navigate to Settings > Secrets and variables > Actions"
+echo "3. Click 'New repository secret'"
+echo "4. Name: AWS_ROLE_ARN"
+echo "5. Value: Paste the ARN from terraform output"
+echo ""
+echo "📝 To get the Role ARN, run:"
+echo "   cd terraform/03-github-oidc-stack"
+echo "   terraform output github_actions_role_arn"
+echo ""

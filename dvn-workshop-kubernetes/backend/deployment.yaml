@@ -35,6 +35,8 @@ spec:
         env:
         - name: ASPNETCORE_ENVIRONMENT
           value: "Production"
+        - name: YOUTUBE_API_KEY
+          value: "YOUR_YOUTUBE_API_KEY_HERE"
         resources:
           requests:
             memory: "256Mi"

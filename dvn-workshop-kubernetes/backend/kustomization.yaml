@@ -8,3 +8,7 @@ resources:
 
 commonLabels:
   app.kubernetes.io/part-of: dvn-workshop
+
+images:
+  - name: 910661159891.dkr.ecr.us-east-1.amazonaws.com/dvn-workshop/backend
+    newTag: latest
