@@ -13,7 +13,7 @@ terraform {
   # Backend Configuration - ADR-002
   backend "s3" {
     bucket       = "dvn-workshop-910661159891-terraform-state"
-    key          = "01-networking-stack/terraform.tfstate"
+    key          = "00-remote-backend-stack/terraform.tfstate"
     region       = "us-east-1"
     use_lockfile = true
     encrypt      = true
