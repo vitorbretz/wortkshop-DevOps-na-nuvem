@@ -21,6 +21,25 @@ O projeto precisa de um cluster Kubernetes gerenciado para hospedar aplicações
 
 ## Decision
 
+### Implementation Approach
+**Recursos Nativos do Terraform AWS Provider**: A implementação utilizará APENAS recursos oficiais do Terraform AWS Provider, sem uso de módulos da comunidade (como terraform-aws-modules/eks). Esta abordagem oferece:
+
+- **Controle Total**: Visibilidade completa de todos os recursos criados
+- **Transparência**: Configuração explícita sem abstrações
+- **Manutenibilidade**: Código direto e fácil de entender
+- **Flexibilidade**: Customização sem limitações de módulos de terceiros
+- **Versionamento**: Dependência apenas do provider oficial da HashiCorp
+
+**Recursos Terraform a serem utilizados**:
+- `aws_eks_cluster` - Cluster EKS
+- `aws_eks_node_group` - Managed node group
+- `aws_eks_addon` - Add-ons do EKS
+- `aws_eks_access_entry` - Access entries para autenticação
+- `aws_eks_access_policy_association` - Policies de acesso
+- `aws_iam_role` - IAM roles
+- `aws_iam_role_policy_attachment` - Policy attachments
+- `aws_security_group` - Security groups (se necessário adicional)
+
 ### Cluster Configuration
 Implementaremos um cluster Amazon EKS com as seguintes características:
 
@@ -195,6 +214,172 @@ terraform/02-eks-cluster-stack/
 └── security-groups.tf            # Additional security groups (if needed)
 ```
 
+### Terraform Resources Examples
+Exemplos dos recursos nativos do AWS Provider a serem utilizados:
+
+#### EKS Cluster Resource
+```hcl
+resource "aws_eks_cluster" "main" {
+  name     = var.eks_cluster.name
+  version  = var.eks_cluster.version
+  role_arn = aws_iam_role.cluster.arn
+
+  vpc_config {
+    subnet_ids              = concat(data.aws_subnets.private.ids, data.aws_subnets.public.ids)
+    endpoint_private_access = var.eks_cluster.endpoint_access.private
+    endpoint_public_access  = var.eks_cluster.endpoint_access.public
+    public_access_cidrs    = var.eks_cluster.endpoint_access.public_access_cidrs
+  }
+
+  enabled_cluster_log_types = var.eks_cluster.logging.enabled ? var.eks_cluster.logging.types : []
+
+  access_config {
+    authentication_mode = var.eks_cluster.authentication_mode
+  }
+
+  tags = merge(local.common_tags, {
+    Name = var.eks_cluster.name
+  })
+}
+```
+
+#### Managed Node Group Resource
+```hcl
+resource "aws_eks_node_group" "main" {
+  cluster_name    = aws_eks_cluster.main.name
+  node_group_name = var.node_group.name
+  node_role_arn   = aws_iam_role.node.arn
+  subnet_ids      = data.aws_subnets.private.ids
+
+  capacity_type  = var.node_group.capacity_type
+  instance_types = var.node_group.instance_types
+  disk_size      = var.node_group.disk_size
+  ami_type       = var.node_group.ami_type
+
+  scaling_config {
+    desired_size = var.node_group.scaling.desired_size
+    min_size     = var.node_group.scaling.min_size
+    max_size     = var.node_group.scaling.max_size
+  }
+
+  update_config {
+    max_unavailable = 1
+  }
+
+  tags = merge(local.common_tags, {
+    Name = var.node_group.name
+  })
+
+  depends_on = [
+    aws_iam_role_policy_attachment.node_worker_policy,
+    aws_iam_role_policy_attachment.node_cni_policy,
+    aws_iam_role_policy_attachment.node_ecr_policy
+  ]
+}
+```
+
+#### EKS Add-on Resource
+```hcl
+resource "aws_eks_addon" "vpc_cni" {
+  cluster_name = aws_eks_cluster.main.name
+  addon_name   = "vpc-cni"
+  addon_version = "latest"  # Ou versão específica compatível
+  
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+
+  tags = local.common_tags
+}
+```
+
+#### Access Entry Resource
+```hcl
+resource "aws_eks_access_entry" "admin" {
+  cluster_name  = aws_eks_cluster.main.name
+  principal_arn = data.aws_caller_identity.current.arn
+  type          = "STANDARD"
+
+  tags = merge(local.common_tags, {
+    Name = "admin-access"
+  })
+}
+
+resource "aws_eks_access_policy_association" "admin" {
+  cluster_name  = aws_eks_cluster.main.name
+  principal_arn = data.aws_caller_identity.current.arn
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.admin]
+}
+```
+
+#### IAM Role Resources
+```hcl
+# Cluster Role
+resource "aws_iam_role" "cluster" {
+  name = "${var.eks_cluster.name}-cluster-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "eks.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "${var.eks_cluster.name}-cluster-role"
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "cluster_policy" {
+  role       = aws_iam_role.cluster.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+}
+
+# Node Role
+resource "aws_iam_role" "node" {
+  name = "${var.eks_cluster.name}-node-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "${var.eks_cluster.name}-node-role"
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "node_worker_policy" {
+  role       = aws_iam_role.node.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+}
+
+resource "aws_iam_role_policy_attachment" "node_cni_policy" {
+  role       = aws_iam_role.node.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+}
+
+resource "aws_iam_role_policy_attachment" "node_ecr_policy" {
+  role       = aws_iam_role.node.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+```
+
 ### Variable Structure
 Usar complex objects conforme best practices:
 ```hcl
@@ -337,8 +522,11 @@ data "aws_caller_identity" "current" {}
 ## Notes
 - Este ADR assume que a VPC da ADR-001 já está provisionada
 - O cluster será criado em uma nova stack independente (02-eks-cluster-stack)
+- **IMPORTANTE**: Não utilizar módulos da comunidade (ex: terraform-aws-modules/eks) - apenas recursos nativos do AWS Provider
+- A implementação usa recursos oficiais do Terraform AWS Provider para total controle e transparência
 - A autenticação híbrida permite transição gradual para Access Entries
 - Node groups em private subnets requerem NAT Gateway (já provisionado)
 - Add-ons essenciais serão instalados automaticamente nas versões latest compatíveis
 - O usuário que criar o cluster terá acesso admin automático via access entry
 - Planeje upgrades regulares de versão Kubernetes (EKS mantém suporte por ~14 meses)
+- Recursos Terraform utilizados: aws_eks_cluster, aws_eks_node_group, aws_eks_addon, aws_eks_access_entry, aws_eks_access_policy_association
