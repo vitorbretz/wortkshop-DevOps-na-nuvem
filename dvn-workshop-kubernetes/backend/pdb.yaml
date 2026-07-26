@@ -1,0 +1,18 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: youtube-backend-pdb
+  namespace: default
+  labels:
+    app.kubernetes.io/name: youtube-backend
+    app.kubernetes.io/instance: youtube-backend-prod
+    app.kubernetes.io/version: v1.0.0
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: dvn-workshop
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: youtube-backend
+      app.kubernetes.io/instance: youtube-backend-prod
