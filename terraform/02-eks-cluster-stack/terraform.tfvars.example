@@ -1,0 +1,71 @@
+# Example Variable Values for EKS Cluster Stack
+# Copy this file to terraform.tfvars and customize as needed
+
+# General Configuration
+aws_region   = "us-east-1"
+project_name = "dvn-workshop"
+environment  = "dev"
+
+# EKS Cluster Configuration
+eks_cluster = {
+  # Kubernetes version (check latest available: aws eks describe-addon-versions)
+  version = "1.33"
+
+  endpoint_access = {
+    private             = true
+    public              = true
+    public_access_cidrs = ["0.0.0.0/0"]  # Restrict to your IP for better security
+  }
+
+  logging = {
+    enabled = true
+    # Available types: api, audit, authenticator, controllerManager, scheduler
+    types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+  }
+
+  # Authentication modes: API, API_AND_CONFIG_MAP, CONFIG_MAP
+  authentication_mode = "API_AND_CONFIG_MAP"
+}
+
+# Node Group Configuration
+node_group = {
+  instance_types = ["t3.medium"]  # 2 vCPUs, 4 GB RAM
+  capacity_type  = "ON_DEMAND"    # or "SPOT" for cost savings
+
+  scaling = {
+    desired_size = 2
+    min_size     = 2
+    max_size     = 4
+  }
+
+  disk_size = 20  # GB per node
+  ami_type  = "AL2023_x86_64_STANDARD"  # Amazon Linux 2023
+}
+
+# EKS Add-ons
+# Check compatible versions: aws eks describe-addon-versions --kubernetes-version 1.33
+eks_addons = {
+  "vpc-cni" = {
+    enabled = true
+    version = "v1.19.1-eksbuild.1"  # Update to latest compatible
+  }
+  "coredns" = {
+    enabled = true
+    version = "v1.11.4-eksbuild.5"
+  }
+  "kube-proxy" = {
+    enabled = true
+    version = "v1.33.1-eksbuild.3"
+  }
+  "eks-pod-identity-agent" = {
+    enabled = true
+    version = "v1.3.7-eksbuild.2"
+  }
+}
+
+# Additional Tags
+additional_tags = {
+  CostCenter = "engineering"
+  Owner      = "devops-team"
+  Cluster    = "eks"
+}
